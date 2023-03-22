@@ -8,14 +8,20 @@ var options = new MqttServerOptionsBuilder()
     //Set endpoint to localhost
     .WithDefaultEndpoint()
     // Port going to use 5004
-    .WithDefaultEndpointPort(5004);
+    .WithDefaultEndpoint();
 // Create a new mqtt server
 var server = new MqttFactory().CreateMqttServer(options.Build());
 //Add Interceptor for logging incoming messages
 server.InterceptingPublishAsync += Server_InterceptingPublishAsync;
+// Add connection Validator
+server.ValidatingConnectionAsync += Server_ValidatingConnectionAsync;
 // Start the server
 await server.StartAsync();
 // Keep application running until user press a key
+var users = new Dictionary<string, string>();
+users.Add("asha", "1234"); // username, password
+users.Add("sepehr", "5678");
+
 ReadLine();
 
 Task Server_InterceptingPublishAsync(InterceptingPublishEventArgs arg)
@@ -33,5 +39,18 @@ Task Server_InterceptingPublishAsync(InterceptingPublishEventArgs arg)
         payload,
         arg.ApplicationMessage?.QualityOfServiceLevel,
         arg.ApplicationMessage?.Retain);
+    return Task.CompletedTask;
+}
+Task Server_ValidatingConnectionAsync(ValidatingConnectionEventArgs arg)
+{
+    if(!string.IsNullOrWhiteSpace(arg.Username)&&!string.IsNullOrWhiteSpace(arg.Password))
+    {
+        if(!(users.TryGetValue(arg.Username, out var password) && password == arg.Password))
+        {
+            arg.ReasonCode = MQTTnet.Protocol.MqttConnectReasonCode.BadUserNameOrPassword;
+            return Task.CompletedTask;
+        }
+    }
+    arg.ReasonCode = MQTTnet.Protocol.MqttConnectReasonCode.BadAuthenticationMethod;
     return Task.CompletedTask;
 }
